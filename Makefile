@@ -9,18 +9,20 @@ CFLAGS+=-Werror -Wall -g \
 	-DKSRC=\"$(RUNTIME_PATH)\" \
 	$(patsubst %,-I%,$(INCLUDES))
 
-#fs
-DEBUGFS_OBJS=inode.o
-FS_OBJS=namei.o open.o libfs.o \
-	$(patsubst %,debugfs/%,$(DEBUGFS_OBJS))
+# lnx fs
+LNX_DEBUGFS_OBJS=inode.o
+LNX_FS_OBJS=namei.o open.o libfs.o \
+	$(patsubst %,debugfs/%,$(LNX_DEBUGFS_OBJS))
 
-# drivers
-DRIVERS_BASE_OBJS=core.o
-DRIVERS_OBJS=$(patsubst %,base/%,$(DRIVERS_BASE_OBJS))
+# lnx drivers
+LNX_DRIVERS_BASE_OBJS=core.o
+LNX_DRIVERS_OBJS=$(patsubst %,base/%,$(LNX_DRIVERS_BASE_OBJS))
 
-# all objs
-OBJS=$(patsubst %,fs/%,$(FS_OBJS)) \
-     $(patsubst %,drivers/%,$(DRIVERS_OBJS))
+# all lnx objs
+LNX_OBJS=$(patsubst %,fs/%,$(LNX_FS_OBJS)) \
+     $(patsubst %,drivers/%,$(LNX_DRIVERS_OBJS))
+
+OBJS=$(patsubst %,lnx/%,$(LNX_OBJS))
 
 %.o: %.c
 	$(CC) -o $@ $(CFLAGS) -c $<
