@@ -14,6 +14,7 @@
 
 /* generic stuff */
 #define __user
+#define __must_check
 #define EXPORT_SYMBOL(sym)
 #define EXPORT_SYMBOL_GPL(sym)
 
