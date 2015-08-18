@@ -7,8 +7,6 @@
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
-#define access_ok(rw, ubuf, cnt) (ubuf ? 1 : 0)
-
 struct dentry *debugfs_create_dir(const char *name, struct dentry *parent);
 struct dentry *debugfs_create_file(const char *name, umode_t mode,
 	struct dentry *parent, void *data, const struct file_operations *fops);

@@ -2,6 +2,8 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 
+#include <linux/kut_namei.h>
+
 typedef ssize_t (*io_func)(struct file *filp, char __user *ubuf, size_t cnt,
 	loff_t *ppos);
 

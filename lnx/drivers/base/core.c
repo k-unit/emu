@@ -1,7 +1,7 @@
 #include <linux/device.h>
 #include <stdarg.h>
 
-static int device_private_init(struct device *dev)
+int device_private_init(struct device *dev)
 {
 	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
 	if (!dev->p)
@@ -32,6 +32,7 @@ int dev_set_name(struct device *dev, const char *fmt, ...)
 	dev->init_name = dev->__name;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(dev_set_name);
 
 /**
  * device_initialize - init device structure.

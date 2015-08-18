@@ -3,23 +3,16 @@
 
 #include <linux/kernel.h>
 #include <linux/uaccess.h>
+#include <linux/cred.h>
+#include <linux/path.h>
+#include <linux/path.h>
+
 #include <dirent.h>
 
 #define DNAME_INLINE_LEN 128U
 
 struct dentry;
 struct file;
-
-struct vfsmount {
-	char unused;
-};
-struct cred {
-	char unused;
-};
-
-struct path {
-	char p[PATH_MAX];
-};
 
 /*
  * Keep mostly read-only and often accessed (especially for
@@ -47,13 +40,6 @@ struct file {
 	struct dentry *f_dentry;
 };
 
-void kut_file_close(struct file *file);
-struct file *kut_file_open(struct dentry *dentry, int flags,
-	const struct cred *cred);
-int kut_file_read(struct file *filp, char __user *ubuf, size_t cnt,
-	loff_t *ppos);
-int kut_file_write(struct file *filp, char __user *ubuf, size_t cnt,
-	loff_t *ppos);
 ssize_t simple_read_from_buffer(void __user *to, size_t count, loff_t *ppos,
 	const void *from, size_t available);
 ssize_t simple_write_to_buffer(void *to, size_t available, loff_t *ppos,

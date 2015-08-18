@@ -6,9 +6,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define MODE_DEFAULT_DIR (S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
-#define MODE_DEFAULT_FILE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH)
-
 typedef enum {
 	false = 0,
 	true = 1
@@ -16,6 +13,7 @@ typedef enum {
 
 typedef unsigned int u32;
 typedef mode_t umode_t;
+typedef unsigned long gfp_t;
 
 typedef struct {
 	int counter;
