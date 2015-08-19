@@ -1,6 +1,8 @@
 #include <linux/device.h>
 #include <stdarg.h>
 
+#include "../../../kut/drivers/base/core.h"
+
 int device_private_init(struct device *dev)
 {
 	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
@@ -24,13 +26,10 @@ int dev_set_name(struct device *dev, const char *fmt, ...)
 	int ret;
 
 	va_start(vargs, fmt);
-	ret = vsnprintf(dev->__name, sizeof(dev->__name), fmt, vargs);
+	ret = kut_dev_set_name(dev, fmt, vargs);
 	va_end(vargs);
-	if (ret >= sizeof(dev->__name))
-		return -1;
 
-	dev->init_name = dev->__name;
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(dev_set_name);
 

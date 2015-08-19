@@ -9,6 +9,20 @@
 	struct device_attribute dev_attr_##_name = __ATTR(_name, _mode, _show, _store)
 
 #define DEV_MAX_NAME 128
+
+/*
+ * The type of device, "struct device" is embedded in. A class
+ * or bus can contain devices of different types
+ * like "partitions" and "disks", "mouse" and "event".
+ * This identifies the device type and carries type-specific
+ * information, equivalent to the kobj_type of a kobject.
+ * If "name" is specified, the uevent will contain it in
+ * the DEVTYPE variable.
+ */
+struct device_type {
+	const char *name;
+};
+
 /**
  * struct device_private - structure to hold the private to the driver core portions of the device structure.
  *
@@ -59,6 +73,8 @@ struct device {
 	struct device_private *p;
 	const char *init_name; /* initial name of the device */
 	char __name[DEV_MAX_NAME];
+
+	bool dynamic; 		/* dynamically allocated device */
 };
 
 static inline const char *dev_name(const struct device *dev)
@@ -82,15 +98,22 @@ int dev_set_name(struct device *dev, const char *fmt, ...);
 
 #define get_device(dev) ({ \
 	do { \
-		if (!dev) \
+		if (!dev) { \
 			dev = kzalloc(sizeof(struct device), GFP_KERNEL); \
+			if (dev) \
+				dev->dynamic = true; \
+		} \
 	} while (0); \
 	dev; \
 })
 
 #define put_device(dev) do { \
-	kfree(dev); \
-	dev = NULL; \
+	if (dev->dynamic) { \
+		kfree(dev); \
+		dev = NULL; \
+	} else { \
+		memset(dev, 0, sizeof(struct device)); \
+	} \
 } while (0)
 
 #endif

@@ -40,11 +40,16 @@ KUT_LIB_OBJS=bug.o
 # kut fs
 KUT_FS_OBJS=namei.o open.o
 
+# kut drivers
+KUT_DRIVERS_BASE_OBJS=core.o
+KUT_DRIVERS_OBJS=$(patsubst %,base/%,$(KUT_DRIVERS_BASE_OBJS))
+
 # all kut objs
 KUT_OBJS= \
 	$(patsubst %,debugfs/%,$(KUT_DEBUGFS_OBJS)) \
 	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
-	$(patsubst %,fs/%,$(KUT_FS_OBJS))
+	$(patsubst %,fs/%,$(KUT_FS_OBJS)) \
+	$(patsubst %,drivers/%,$(KUT_DRIVERS_OBJS))
 
 #
 # All Objects
@@ -57,7 +62,7 @@ OBJS=$(patsubst %,lnx/%,$(LNX_OBJS)) $(patsubst %,kut/%,$(KUT_OBJS))
 all: libkernel
 
 libkernel: $(OBJS)
-	$(AR) -ru $@.a $^
+	$(AR) -r $@.a $^
 
 clean:
 	@rm -f $(OBJS)
