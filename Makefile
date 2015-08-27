@@ -43,13 +43,14 @@ LNX_OBJS= \
 #
 
 # kut lib
-KUT_LIB_OBJS=bug.o
+KUT_LIB_OBJS=bug.o random32.o
+
+# kut kernel
+KUT_KERNEL_DEBUG=debug_core.o
+KUT_KERNEL_OBJS=$(patsubst %,debug/%,$(KUT_KERNEL_DEBUG))
 
 # kut fs
 KUT_FS_OBJS=namei.o open.o
-
-# kut lib
-KUT_LIB_OBJS=random32.o
 
 # kut mm
 KUT_MM_OBJS=memory.o 
@@ -64,8 +65,8 @@ KUT_DRIVERS_OBJS= \
 # all kut objs
 KUT_OBJS= \
 	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
+	$(patsubst %,kernel/%,$(KUT_KERNEL_OBJS)) \
 	$(patsubst %,fs/%,$(KUT_FS_OBJS)) \
-	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
 	$(patsubst %,mm/%,$(KUT_MM_OBJS)) \
 	$(patsubst %,drivers/%,$(KUT_DRIVERS_OBJS))
 
