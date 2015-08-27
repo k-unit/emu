@@ -27,15 +27,18 @@ struct file_operations {
 	int (*open)(struct inode *inode, struct file *filp);
 	ssize_t (*read)(struct file *filp, char __user *ubuf,
 		size_t cnt, loff_t *ppos);
-	ssize_t (*write)(struct file *filp, char __user *ubuf,
+	ssize_t (*write)(struct file *filp, const char __user *ubuf,
 		size_t cnt, loff_t *ppos);
 };
 
 struct file {
+#ifdef CONFIG_KUT_FS
 	FILE *f;
+#endif
 	struct inode *f_inode; /* cached value */
 	const struct file_operations *f_op;
 	void *private_data;
+	fmode_t f_mode;
 
 	struct dentry *f_dentry;
 };

@@ -1,6 +1,10 @@
 #ifndef _KUT_FS_H_
 #define _KUT_FS_H_
 
+#define KUT_RDONLY 1<<0
+#define KUT_WRONLY 1<<1
+#define KUT_RDWR 1<<2
+
 void kut_file_close(struct file *file);
 struct file *kut_file_open(struct dentry *dentry, int flags,
 	const struct cred *cred);

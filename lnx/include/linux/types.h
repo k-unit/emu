@@ -14,6 +14,7 @@ typedef enum {
 typedef unsigned int u32;
 typedef mode_t umode_t;
 typedef unsigned long gfp_t;
+typedef unsigned long fmode_t;
 
 typedef struct {
 	int counter;

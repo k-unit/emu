@@ -2,6 +2,7 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 
+#include <linux/kut_fs.h>
 #include <linux/kut_namei.h>
 
 typedef ssize_t (*io_func)(struct file *filp, char __user *ubuf, size_t cnt,
@@ -15,7 +16,9 @@ void kut_file_close(struct file *file)
 {
 	struct dentry *dentry = file->f_dentry;
 
+#ifdef CONFIG_KUT_FS
 	fclose(file->f);
+#endif
 	free(file);
 
 	dentry->d_u.d_count--;
@@ -41,6 +44,9 @@ struct file *kut_file_open(struct dentry *dentry, int flags,
 {
 	struct path path;
 	struct file *filp;
+#ifdef CONFIG_KUT_FS
+	const char *mode;
+#endif
 
 	if (kut_dentry_dir(dentry)) {
 		WARN_ON(1);
@@ -50,21 +56,45 @@ struct file *kut_file_open(struct dentry *dentry, int flags,
 	if (vfs_path_lookup(dentry, NULL, (char*)dentry->d_iname, 0, &path))
 		return NULL;
 
+	WARN_ON(!(flags & KUT_RDONLY) && !(flags & KUT_WRONLY) &&
+		!(flags & KUT_RDWR));
+
+#ifdef CONFIG_KUT_FS
+	switch (flags) {
+	case KUT_RDONLY:
+		mode = "r";
+		break;
+	case KUT_WRONLY:
+		mode = "w";
+		break;
+	case KUT_RDWR:
+		mode = "r+";
+		break;
+	default:
+		return NULL;
+	}
+#endif
+
 	if (!(filp = malloc(sizeof(struct file))))
 		return NULL;
 
-	filp->f = fopen(path.p, "w+");
+#ifdef CONFIG_KUT_FS
+	filp->f = fopen(path.p, mode);
 	if (!filp->f)
 		goto error;
+#endif
 
 	filp->f_inode = &dentry->d_inode;
 	filp->f_op = dentry->d_fops;
 	filp->f_dentry = dentry;
 	filp->f_dentry->d_u.d_count++;
+	filp->f_mode = flags;
 
 	if (filp->f_op && filp->f_op->open &&
 		filp->f_op->open(filp->f_inode, filp)) {
+#ifdef CONFIG_KUT_FS
 		fclose(filp->f);
+#endif
 		goto error;
 	}
 
@@ -81,9 +111,17 @@ static int file_io(struct file *filp, char *ubuf, size_t cnt, loff_t *ppos,
 	io_func func;
 
 	if (!filp->f_op)
-		return -1;
+		return -EINTR;
 
-	func = is_read ? filp->f_op->read : filp->f_op->write;
+	if (is_read) {
+		if (!(filp->f_mode & KUT_RDONLY) && !(filp->f_mode & KUT_RDWR))
+			return -EACCES;
+		func = filp->f_op->read;
+	} else {
+		if (!(filp->f_mode & KUT_WRONLY) && !(filp->f_mode & KUT_RDWR))
+			return -EACCES;
+		func = (io_func)filp->f_op->write;
+	}
 	return func(filp, ubuf, cnt, ppos);
 }
 
