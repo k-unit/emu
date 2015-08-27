@@ -28,10 +28,14 @@ LNX_DRIVERS_OBJS= \
 		  $(patsubst %,base/%,$(LNX_DRIVERS_BASE_OBJS)) \
 		  $(patsubst %,mmc/%,$(LNX_DRIVERS_MMC_OBJS))
 
+# lnx lib
+LNX_LIB_OBJS=kstrtox.o
+
 # all lnx objs
 LNX_OBJS= \
 	$(patsubst %,fs/%,$(LNX_FS_OBJS)) \
-	$(patsubst %,drivers/%,$(LNX_DRIVERS_OBJS))
+	$(patsubst %,drivers/%,$(LNX_DRIVERS_OBJS)) \
+	$(patsubst %,lib/%,$(LNX_LIB_OBJS))
 
 #
 # Unit Test Helper Functions

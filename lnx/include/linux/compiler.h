@@ -5,5 +5,7 @@
 #define __must_check
 #define __force
 
+#define likely(x) (x)
+#define unlikely(x) (x)
 #endif
 
