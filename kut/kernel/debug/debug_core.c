@@ -1,6 +1,7 @@
 #include <linux/namei.h>
 #include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/debugfs.h>
 #include <linux/list.h>
 
 #include <linux/kut_types.h>
@@ -670,6 +671,44 @@ exit:
 	return ret;
 }
 
+static int debugfs_basic(void)
+{
+	struct dentry *dentry_d, *dentry_f = NULL;
+	int data = 10;
+	int ret = -1;
+	char buf[30] = {0};
+
+	dentry_d = debugfs_create_dir("debugfs_test_dir", NULL);
+	if (verify_dentry(dentry_d, &kern_root, NULL, "debugfs_test_dir", 1,
+		false, true, 0, false, NULL)) {
+		goto exit;
+	}
+	dentry_f = debugfs_create_file("debugfs_test_file",
+		KUT_MODE_DEFAULT_FILE, dentry_d, &data, &file_test_fops);
+	if (verify_dentry(dentry_f, dentry_d, &data, "debugfs_test_file", 2,
+		false, false, 0, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	kut_dentry_read(dentry_f, buf, sizeof(buf));
+	if (strcmp(buf, "10")) {
+		pr_kut("expected to read 10 but got: %s", buf);
+		goto exit;
+	}
+
+	kut_dentry_write(dentry_f, "21", strlen("21"));
+	if (data != 21) {
+		pr_kut("data should have been written to 21, but is: %d", data);
+		goto exit;
+	}
+
+	ret = 0;
+exit:
+	if (dentry_d)
+		kut_dentry_remove_recursive(dentry_d);
+	return ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -711,6 +750,10 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "virtual file: dentry reference count",
 		.func = file_dentry_ref_count,
+	},
+	{
+		.description = "debugfs: basic usability",
+		.func = debugfs_basic,
 	},
 };
 
