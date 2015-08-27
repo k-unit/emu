@@ -1,5 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/namei.h>
+#include <linux/slab.h>
 #include <linux/list.h>
 
 #include <linux/kut_namei.h>
@@ -63,19 +64,22 @@ struct dentry *kut_dentry_create(const char *name, struct dentry *parent,
 {
 	struct dentry *dentry;
 	struct path path;
-#ifdef CONFIG_FS
+#ifdef CONFIG_KUT_FS
 	int fd;
 #endif
+
+	if (!parent)
+		parent = &kern_root;
 
 	if (!kut_dentry_dir(parent)) {
 		WARN_ON(1);
 		return NULL;
 	}
 
-	if (!(dentry = malloc(sizeof(struct dentry))))
+	if (!(dentry = kzalloc(sizeof(struct dentry), GFP_KERNEL)))
 		return NULL;
 
-	dentry->d_parent = parent ? parent : &kern_root;
+	dentry->d_parent = parent;
 	snprintf((char*)dentry->d_iname, DNAME_INLINE_LEN, "%s", name);
 
 	dentry->d_depth = dentry->d_parent->d_depth + 1;
@@ -91,7 +95,7 @@ struct dentry *kut_dentry_create(const char *name, struct dentry *parent,
 	if (is_dir) {
 		INIT_LIST_HEAD(&dentry->d_u.d_subdirs);
 
-#ifdef CONFIG_FS
+#ifdef CONFIG_KUT_FS
 		fd = mkdir(path.p, S_IFDIR | mode);
 		if (fd == -1)
 			goto error;
@@ -100,7 +104,7 @@ struct dentry *kut_dentry_create(const char *name, struct dentry *parent,
 	} else {
 		dentry->d_u.d_count = 0;
 
-#ifdef CONFIG_FS
+#ifdef CONFIG_KUT_FS
 		fd = open(path.p, O_CREAT | O_RDWR, mode);
 		if (fd == -1)
 			goto error;
@@ -130,7 +134,7 @@ error:
 int kut_dentry_remove(struct dentry *dentry)
 {
 	struct path path;
-#ifdef CONFIG_FS
+#ifdef CONFIG_KUT_FS
 	int ret;
 #endif
 
@@ -142,10 +146,10 @@ int kut_dentry_remove(struct dentry *dentry)
 	if (vfs_path_lookup(dentry, NULL, (char*)dentry->d_iname, 0, &path))
 		return -ENOENT;
 
-#ifdef CONFIG_FS
+#ifdef CONFIG_KUT_FS
 	ret = kut_dentry_dir(dentry) ? rmdir(path.p) : unlink(path.p);
 	if (ret)
-		return -1;
+		return -EBUSY;
 #endif
 
 	list_del(&dentry->d_child);
@@ -155,10 +159,10 @@ int kut_dentry_remove(struct dentry *dentry)
 
 static void __dentry_remove_recursive(struct dentry *parent, bool *busy)
 {
-	struct dentry *child;
+	struct dentry *child, *tmp;
 
 	/* try to remove the parent dentry */
-	if (!kut_dentry_remove(parent))
+	if (parent != &kern_root && !kut_dentry_remove(parent))
 		return;
 
 	/* if a file is open - mark busy */
@@ -168,10 +172,10 @@ static void __dentry_remove_recursive(struct dentry *parent, bool *busy)
 	}
 
 	/* try to remove all sub dentries */
-	list_for_each_entry(child, &parent->d_u.d_subdirs, d_child)
+	list_for_each_entry_safe(child, tmp, &parent->d_u.d_subdirs, d_child)
 		__dentry_remove_recursive(child, busy);
 
-	if (!*busy)
+	if (parent != &kern_root && !*busy)
 		kut_dentry_remove(parent);
 }
 
@@ -200,12 +204,14 @@ static int kut_dentry_io(struct dentry *dentry, char __user *ubuf, size_t cnt,
 {
 	struct file *filp;
 	int ret;
-	loff_t ppos;
+	loff_t ppos = 0;
 	int (*rw_func)(struct file *filp, char __user *ubuf, size_t cnt,
 		loff_t *ppos);
 
-	if (!(filp = kut_file_open(dentry, 0, NULL)))
+	if (!(filp = kut_file_open(dentry, is_read ? KUT_RDONLY : KUT_WRONLY,
+		NULL))) {
 		return -1;
+	}
 
 	rw_func = is_read ? kut_file_read : kut_file_write;
 	ret = rw_func(filp, ubuf, cnt, &ppos);

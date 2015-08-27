@@ -6,6 +6,7 @@
 #include <linux/cred.h>
 #include <linux/path.h>
 #include <linux/path.h>
+#include <linux/err.h>
 
 #include <dirent.h>
 

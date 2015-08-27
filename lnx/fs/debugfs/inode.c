@@ -7,7 +7,6 @@ static struct dentry *debugfs_create_dentry(const char *name,
 {
 	struct dentry *dentry;
 	char *err_str;
-	struct path path;
 	enum {
 		ERR_CREAT_FILE,
 		ERR_CREAT_DIR,
@@ -16,7 +15,6 @@ static struct dentry *debugfs_create_dentry(const char *name,
 
 	if (!(dentry = kut_dentry_create(name, parent, mode, data, fops,
 		is_dir))) {
-		*path.p = 0;
 		err = ERR_NOMEM;
 		goto error;
 	}
@@ -41,7 +39,7 @@ error:
 		break;
 	}
 
-	pr_err("%s: %s%s%s\n", err_str, path.p, *path.p ? "/" : "", name);
+	pr_err("%s: %s\n", err_str, name);
 	return NULL;
 }
 
