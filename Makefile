@@ -20,7 +20,13 @@ LNX_FS_OBJS=namei.o libfs.o \
 
 # lnx drivers
 LNX_DRIVERS_BASE_OBJS=core.o
-LNX_DRIVERS_OBJS=$(patsubst %,base/%,$(LNX_DRIVERS_BASE_OBJS))
+LNX_DRIVERS_MMC_CORE_OBJS=core.o host.o
+LNX_DRIVERS_MMC_OBJS= \
+		      $(patsubst %,core/%,$(LNX_DRIVERS_MMC_CORE_OBJS))
+
+LNX_DRIVERS_OBJS= \
+		  $(patsubst %,base/%,$(LNX_DRIVERS_BASE_OBJS)) \
+		  $(patsubst %,mmc/%,$(LNX_DRIVERS_MMC_OBJS))
 
 # all lnx objs
 LNX_OBJS= \
@@ -39,7 +45,10 @@ KUT_FS_OBJS=namei.o open.o
 
 # kut drivers
 KUT_DRIVERS_BASE_OBJS=core.o
-KUT_DRIVERS_OBJS=$(patsubst %,base/%,$(KUT_DRIVERS_BASE_OBJS))
+KUT_DRIVERS_MMC_OBJS=core/bus.o core/host.o host/kunit.o
+KUT_DRIVERS_OBJS= \
+		  $(patsubst %,base/%,$(KUT_DRIVERS_BASE_OBJS)) \
+		  $(patsubst %,mmc/%,$(KUT_DRIVERS_MMC_OBJS))
 
 # all kut objs
 KUT_OBJS= \
