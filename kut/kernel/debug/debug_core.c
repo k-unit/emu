@@ -275,6 +275,68 @@ static int verify_file(struct file *filp, struct file_operations *f_op,
 	return 0;
 }
 
+/**
+ * verify_device - test all the fields of a device and verify they're as
+ * expected
+ * @dev: the device to test
+ * @expected_addr: if a static device - its address, NULL otherwise
+ * @parent: the expected parent
+ * @name: the expected name
+ * @siblings: are any siblings expected
+ * @children: are any children expected
+ */
+static int verify_device(struct device *dev, struct device *expected_addr,
+	struct device *parent, const char *name, bool siblings, bool children)
+{
+	if (!dev) {
+		pr_kut("device not created");
+		return -1;
+	}
+	if (expected_addr) {
+		if ((dev != expected_addr) || dev->dynamic) {
+			pr_kut("static device marked as dynamic");
+			return -2;
+		}
+	} else {
+		if (!dev->dynamic) {
+			pr_kut("dynamic device marked as static");
+			return -3;
+		}
+	}
+	if (dev->parent != parent) {
+		pr_kut("wrong parent");
+		return -4;
+	}
+	if (strcmp(dev_name(dev), name)) {
+		pr_kut("wrong device name");
+		return -5;
+	}
+	if (!dev->p) { /* XXX needs to follow kernel's semantics! */
+		pr_kut("device has no private data");
+		return -6;
+	}
+	if (!list_verify_siblings(dev, siblings, p->knode_parent, parent,
+		p->klist_children)) {
+		return -7;
+	}
+	if (!(children ^ list_empty(&dev->p->klist_children))) {
+		pr_kut("expected %schilren but dev->p->klist_children list is "\
+			"%sempty", children ? "" : "no ",
+			children ? "" : "not ");
+		return -8;
+	}
+	if (dev->p->driver_data) {
+		pr_kut("device has data which it should not have");
+		return -9;
+	}
+	if (dev->p->device != dev) {
+		pr_kut("private data's device doesn't point back to dev");
+		return -10;
+	}
+
+	return 0;
+}
+
 static int bug_on_test(void)
 {
 	int ret;
@@ -709,6 +771,96 @@ exit:
 	return ret;
 }
 
+static int device_life_cycle(void)
+{
+	struct device *dev;
+	int ret = -1;
+
+	dev = kut_dev_init(NULL, NULL, "parent");
+	if (verify_device(dev, NULL, NULL, "parent", false, false))
+		goto exit;
+
+	dev = kut_dev_uninit(dev);
+	if (dev)
+		goto exit;
+
+	ret = 0;
+exit:
+	if (dev) {
+		kfree(dev->p);
+		kfree(dev);
+	}
+
+	return ret;
+}
+
+static int simple_device_hierarchy_fn(struct device *dev, void *data)
+{
+	int *generation = data;
+	char fmt[20], output[50];
+
+	if (*generation) {
+		snprintf(fmt, sizeof(fmt), "%%-%ds|\n", *generation);
+		snprintf(output, sizeof(output), fmt, "");
+		pr_info("%s", output);
+	}
+	snprintf(fmt, sizeof(fmt), "%%-%ds+-- %%s (%%s)\n", *generation);
+	snprintf(output, sizeof(output), fmt, "", dev_name(dev),
+		dev->dynamic ? "dynamic" : "static");
+	pr_info("%s", output);
+
+	*generation+=2;
+	device_for_each_child(dev, generation, simple_device_hierarchy_fn);
+	*generation-=2;
+	return 0;
+}
+
+static int simple_device_hierarchy(void)
+{
+	struct device grandpa = {0}, son1 = {0}; /* statically allocated */
+	struct device *dad, *daughter1, *daughter2; /*dynamically allocated */
+	struct device *tmp;
+	int ret = -1;
+	int generation = 0;
+
+	tmp = kut_dev_init(&grandpa, NULL, "grandpa");
+	if (verify_device(tmp, &grandpa, NULL, "grandpa", false, false))
+		goto exit;
+
+	dad = kut_dev_init(NULL, &grandpa, "dad");
+	if (verify_device(dad, NULL, &grandpa, "dad", false, false))
+		goto exit;
+
+	daughter1 = kut_dev_init(NULL, dad, "daughter1");
+	if (verify_device(daughter1, NULL, dad, "daughter1", false, false))
+		goto exit;
+
+	tmp = kut_dev_init(&son1, dad, "son1");
+	if (verify_device(tmp, &son1, dad, "son1", true, false)) {
+		goto exit;
+	}
+
+	daughter2 = kut_dev_init(NULL, dad, "daughter2");
+	if (verify_device(daughter2, NULL, dad, "daughter2", true, false))
+		goto exit;
+
+	/* verify grandpa and dad now have children and that daughter1 now has
+	 * siblings */
+	if (verify_device(&grandpa, &grandpa, NULL, "grandpa", false, true) ||
+		verify_device(dad, NULL, &grandpa, "dad", false, true) ||
+		verify_device(daughter1, NULL, dad, "daughter1", true, false)) {
+		goto exit;
+	}
+
+	ret = simple_device_hierarchy_fn(&grandpa, &generation);
+
+exit:
+	if (kut_dev_uninit(&grandpa))
+		ret = -1;
+
+	return ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -754,6 +906,14 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "debugfs: basic usability",
 		.func = debugfs_basic,
+	},
+	{
+		.description = "device: init and uninit a device",
+		.func = device_life_cycle,
+	},
+	{
+		.description = "device: simple device hierarchy",
+		.func = simple_device_hierarchy,
 	},
 };
 
