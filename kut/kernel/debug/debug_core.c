@@ -1,9 +1,14 @@
 #include <linux/namei.h>
 #include <linux/fs.h>
+#include <linux/device.h>
 #include <linux/list.h>
 
 #include <linux/kut_types.h>
+#include <linux/kut_device.h>
 #include <linux/kut_namei.h>
+
+#include <linux/kut_fs.h>
+#include <linux/kut_bug.h>
 
 #include <asm-generic/bug.h>
 
@@ -224,6 +229,51 @@ static int verify_dentry(struct dentry *dentry, struct dentry *parent,
 	return 0;
 }
 
+/**
+ * verify_file - test all the fields of a file and verify they're as expected
+ * @filp: the file to test
+ * @i_private_data: expected inode underlying private data
+ * @f_private_data: expected file private data
+ * @f_dentry: expected corresponding dentry
+ */
+static int verify_file(struct file *filp, struct file_operations *f_op,
+	void *i_private_data, void *f_private_data, struct dentry *f_dentry)
+{
+	if (!filp) {
+		pr_kut("no filp");
+		return -1;
+	}
+
+	if (filp->f_op != f_op) {
+		pr_kut("wrong file operations");
+		return -2;
+	}
+
+	if (filp->f_inode->i_private != i_private_data) {
+		pr_kut("f_inode->i_private contains wrong data");
+		return -3;
+	}
+
+	if (filp->private_data != f_private_data) {
+		pr_kut("filp contains wrong data");
+		return -4;
+	}
+
+	if (filp->f_dentry != f_dentry) {
+		pr_kut("wrong dentry");
+		return -5;
+	}
+
+#ifdef CONFIG_KUT_FS
+	if (!filp->f) {
+		pr_kut("no file created");
+		return -6;
+	}
+#endif
+
+	return 0;
+}
+
 static int bug_on_test(void)
 {
 	int ret;
@@ -402,6 +452,224 @@ exit:
 	return ret;
 }
 
+static int file_test_open(struct inode *inode, struct file *filp)
+{
+	filp->private_data = inode->i_private;
+	return 0;
+}
+
+static ssize_t file_test_read(struct file *filp,
+	char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	int *data = filp->private_data;
+	int len, ret;
+	char buf[30];
+
+	len = snprintf(buf, sizeof(buf), "%d", *data);
+	ret = simple_read_from_buffer(ubuf, len, ppos, buf, len);
+	return ret;
+}
+
+static ssize_t file_test_write(struct file *filp,
+	const char __user *ubuf, size_t cnt, loff_t *ppos)
+{
+	int *data = filp->private_data;
+	int ret;
+
+	ret = kstrtoint_from_user(ubuf, strlen(ubuf), 0, data);
+	return ret ? 0 : cnt;
+}
+
+static struct file_operations file_test_fops = {
+	.open = file_test_open,
+	.read = file_test_read,
+	.write = file_test_write,
+};
+
+static int simple_file_test(void)
+{
+	struct dentry *dentry;
+	int data = 4, test;
+	struct file *filp = NULL;
+	int ret = -1;
+	char buf[30] = {0};
+	loff_t ppos = 0;
+
+	/* create file dentry */
+	dentry = kut_dentry_create("test_file", &kern_root,
+		KUT_MODE_DEFAULT_FILE, &data, &file_test_fops, false);
+	if (verify_dentry(dentry, &kern_root, &data, "test_file", 1, 0, false,
+		0, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	/* file open */
+	filp = kut_file_open(dentry, KUT_RDWR, NULL);
+	if (verify_file(filp, &file_test_fops, &data, &data, dentry))
+		goto exit;
+
+	/* file read */
+	kut_file_read(filp, buf, sizeof(buf), &ppos);
+	ret = kstrtoint(buf, 10, &test);
+	if (ret || test != 4) {
+		ret = -1;
+		goto exit;
+	}
+
+	/* file write */
+	kut_file_write(filp, "5", strlen("5"), &ppos);
+	if (data != 5)
+		goto exit;
+
+	/* read to verify write */
+	kut_file_read(filp, buf, sizeof(buf), &ppos);
+	ret = kstrtoint(buf, 10, &test);
+	if (ret || test != 5) {
+		ret = -1;
+		goto exit;
+	}
+
+exit:
+	/* close all */
+	if (filp)
+		kut_file_close(filp);
+	if (dentry)
+		kut_dentry_remove(dentry);
+	return ret;
+}
+
+static int file_dentry_read_write(void)
+{
+	struct dentry *dentry;
+	int data = 4, test;
+	int ret = -1;
+	char buf[30] = {0};
+
+	/* create file dentry */
+	dentry = kut_dentry_create("test_file", &kern_root,
+		KUT_MODE_DEFAULT_FILE, &data, &file_test_fops, false);
+	if (verify_dentry(dentry, &kern_root, &data, "test_file", 1, 0, false,
+		0, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	/* dentry read */
+	kut_dentry_read(dentry, buf, sizeof(buf));
+	ret = kstrtoint(buf, 10, &test);
+	if (ret || test != 4) {
+		ret = -1;
+		goto exit;
+	}
+
+	/* dentry write */
+	kut_dentry_write(dentry, "5", strlen("5"));
+	if (data != 5)
+		goto exit;
+
+	/* read to verify write */
+	kut_dentry_read(dentry, buf, sizeof(buf));
+	ret = kstrtoint(buf, 10, &test);
+	if (ret || test != 5) {
+		ret = -1;
+		goto exit;
+	}
+
+exit:
+	/* close dentry */
+	if (dentry)
+		kut_dentry_remove(dentry);
+	return ret;
+}
+
+static int file_dentry_ref_count(void)
+{
+	struct dentry *dentry;
+	struct file *filp1 = NULL, *filp2 = NULL;
+	int ret = -1;
+
+	/* create file dentry */
+	dentry = kut_dentry_create("test_file", &kern_root,
+		KUT_MODE_DEFAULT_FILE, NULL, &file_test_fops, false);
+	if (verify_dentry(dentry, &kern_root, NULL, "test_file", 1, false,
+		false, 0, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	/* filp1 open */
+	filp1 = kut_file_open(dentry, KUT_RDONLY, NULL);
+	if (verify_file(filp1, &file_test_fops, NULL, NULL, dentry))
+		goto exit;
+	if (verify_dentry(dentry, &kern_root, NULL, "test_file", 1, false,
+		false, 1, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	/* try to remove the dentry */
+	ret = kut_dentry_remove(dentry);
+	if (ret != -EBUSY) {
+		pr_kut("tried to remove a busy dentry and got wrong result: %d",
+			ret);
+		if (!ret)
+			dentry = NULL;
+		goto exit;
+	}
+	/* filp2 open */
+	filp2 = kut_file_open(dentry, KUT_WRONLY, NULL);
+	if (verify_file(filp2, &file_test_fops, NULL, NULL, dentry))
+		goto exit;
+	if (verify_dentry(dentry, &kern_root, NULL, "test_file", 1, false,
+		false, 2, false, &file_test_fops)) {
+		goto exit;
+	}
+
+	/* try to remove the dentry */
+	ret = kut_dentry_remove(dentry);
+	if (ret != -EBUSY) {
+		pr_kut("tried to remove a busy dentry and got wrong result: %d",
+			ret);
+		if (!ret)
+			dentry = NULL;
+		goto exit;
+	}
+
+	/* filp1 close */
+	kut_file_close(filp1);
+	filp1 = NULL;
+
+	/* try to remove the dentry */
+	ret = kut_dentry_remove(dentry);
+	if (ret != -EBUSY) {
+		pr_kut("tried to remove a busy dentry and got wrong result: %d",
+			ret);
+		if (!ret)
+			dentry = NULL;
+		goto exit;
+	}
+
+	/* filp2 close */
+	kut_file_close(filp2);
+	filp2 = NULL;
+
+	/* try to remove the dentry */
+	ret = kut_dentry_remove(dentry);
+	if (ret) {
+		pr_kut("could not remove an idle dentry: %d", ret);
+		goto exit;
+	}
+	dentry = NULL;
+
+	ret = 0;
+exit:
+	/* close all */
+	if (filp1)
+		kut_file_close(filp1);
+	if (filp2)
+		kut_file_close(filp2);
+	if (dentry)
+		kut_dentry_remove(dentry);
+	return ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -431,6 +699,18 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "dentry: lookup a dentry by path",
 		.func = dentry_lookup_test,
+	},
+	{
+		.description = "virtual file: create, read and write",
+		.func = simple_file_test,
+	},
+	{
+		.description = "virtual file: dentry read/write",
+		.func = file_dentry_read_write,
+	},
+	{
+		.description = "virtual file: dentry reference count",
+		.func = file_dentry_ref_count,
 	},
 };
 
