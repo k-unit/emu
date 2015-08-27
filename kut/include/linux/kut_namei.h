@@ -13,5 +13,7 @@ int kut_dentry_write(struct dentry *dentry, char __user *ubuf, size_t cnt);
 bool kut_dentry_dir(struct dentry *dentry);
 bool kut_dentry_busy(struct dentry *dentry);
 
+
+struct dentry *kut_dentry_lookup(struct dentry *base, char *path);
 #endif
 

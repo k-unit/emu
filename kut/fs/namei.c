@@ -6,6 +6,8 @@
 #include <linux/kut_namei.h>
 #include <linux/kut_fs.h>
 
+#include <string.h>
+
 struct dentry kern_root = {
 	.d_iname = KSRC,
 	.d_dir = true,
@@ -248,5 +250,45 @@ int kut_dentry_read(struct dentry *dentry, char __user *ubuf, size_t cnt)
 int kut_dentry_write(struct dentry *dentry, char __user *ubuf, size_t cnt)
 {
 	return kut_dentry_io(dentry, ubuf, cnt, false);
+}
+
+static struct dentry *__dentry_lookup(struct dentry *base, char *name)
+{
+	struct dentry *pos;
+	
+	list_for_each_entry(pos, &base->d_u.d_subdirs, d_child) {
+		if (strcmp(name, (char*)pos->d_iname))
+			continue;
+
+		name = strtok(NULL, "/");
+		if (!name)
+			return pos;
+		if (!kut_dentry_dir(pos))
+			return NULL;
+		return __dentry_lookup(pos, name);
+	}
+
+	return NULL;
+}
+
+struct dentry *kut_dentry_lookup(struct dentry *base, char *path)
+{
+	char p[PATH_MAX];
+	char *name;
+
+	if (!base)
+		base = &kern_root;
+	if (!kut_dentry_dir(base))
+		return NULL;
+
+	if (strlen(path) >= PATH_MAX)
+		return NULL;
+
+	strncpy(p, path, PATH_MAX);
+	name = strtok(p, "/");
+	if (!name)
+		return NULL;
+
+	return __dentry_lookup(base, name);
 }
 
