@@ -1,13 +1,10 @@
 CC=gcc
 AR=ar
 
-CONFIGS= \
-	 CONFIG_FS=y
-
 CFLAGS+=-Werror -Wall -g \
-	$(patsubst %=y,-D%,$(filter %=y,$(strip $(CONFIGS)))) \
 	-DKSRC=\"$(RUNTIME_PATH)\" \
-	$(patsubst %,-I%,$(INCLUDES)) -Ikut/include
+	$(CONFIGS_Y:%=-D%=y) \
+	$(INCLUDES:%=-I%)
 
 #
 # Linux Emulation
