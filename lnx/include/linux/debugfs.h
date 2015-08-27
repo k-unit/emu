@@ -2,8 +2,8 @@
 #define _DEBUGFS_H_
 
 #include <linux/fs.h>
+#include <linux/err.h>
 
-#define DEBUGFS_PATH "sys/kernel/debug"
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 

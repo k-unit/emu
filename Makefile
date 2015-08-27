@@ -31,9 +31,6 @@ LNX_OBJS= \
 # Unit Test Helper Functions
 #
 
-# kut debugfs
-KUT_DEBUGFS_OBJS=inode.o
-
 # kut lib
 KUT_LIB_OBJS=bug.o
 
@@ -46,7 +43,6 @@ KUT_DRIVERS_OBJS=$(patsubst %,base/%,$(KUT_DRIVERS_BASE_OBJS))
 
 # all kut objs
 KUT_OBJS= \
-	$(patsubst %,debugfs/%,$(KUT_DEBUGFS_OBJS)) \
 	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
 	$(patsubst %,fs/%,$(KUT_FS_OBJS)) \
 	$(patsubst %,drivers/%,$(KUT_DRIVERS_OBJS))
