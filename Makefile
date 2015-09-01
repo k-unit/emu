@@ -3,7 +3,7 @@ AR=ar
 
 CFLAGS+=-Werror -Wall -g \
 	-DKSRC=\"$(RUNTIME_PATH)\" \
-	$(CONFIGS_Y:%=-D%=y) \
+	$(CONFIGS_Y:%=-D%) \
 	$(INCLUDES:%=-I%)
 
 #
