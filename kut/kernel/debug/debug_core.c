@@ -3,12 +3,16 @@
 #include <linux/device.h>
 #include <linux/debugfs.h>
 #include <linux/list.h>
+#include <linux/mmzone.h>
+
+#include <asm-generic/page.h>
 
 #include <linux/kut_types.h>
 #include <linux/kut_device.h>
 #include <linux/kut_namei.h>
 
 #include <linux/kut_fs.h>
+#include <linux/kut_mmzone.h>
 #include <linux/kut_bug.h>
 
 #include <asm-generic/bug.h>
@@ -332,6 +336,79 @@ static int verify_device(struct device *dev, struct device *expected_addr,
 	if (dev->p->device != dev) {
 		pr_kut("private data's device doesn't point back to dev");
 		return -10;
+	}
+
+	return 0;
+}
+
+/**
+ * verify_page - test all the fields of a struct page and verify they're as
+ * expected
+ * @page: the page test
+ * @gfp_mask: the expected gfp mask
+ * @order: the expected order of the page
+ * @pages_to_test: is the page the 1st in an allocation segment
+ */
+static int verify_page(struct page *page, gfp_t gfp_mask, int order,
+	int pages_to_test)
+{
+	int i;
+	void *virtual;
+
+	if (!page) {
+		if (order >= MAX_ORDER)
+			return 0;
+
+		pr_kut("page segment not created");
+		return -1;
+	}
+
+	if (!page_address(page)) {
+		pr_kut("virtual not allocated");
+		return -2;
+	}
+
+	virtual = page_address(page);
+
+	for (i = 0; i < pages_to_test; i++) {
+		if (page_address(&page[i]) != virtual + i * PAGE_SIZE) {
+			pr_kut("page %d: virtual incorrectly assigned", i);
+			return -3;
+		}
+
+		if (kut_mem_lookup_virtual_by_page(&page[i]) !=
+			page_address(&page[i])) {
+			pr_kut("page %d: "
+				"wrong kut_mem_lookup_virtual_by_page()", i);
+			return -4;
+		}
+
+		if (kut_mem_lookup_page_by_virtual(virtual + i * PAGE_SIZE) !=
+			&page[i]) {
+			pr_kut("page %d: "
+				"wrong kut_mem_lookup_page_by_virtual()", i);
+			return -5;
+		}
+
+		if (page[i].order >= MAX_ORDER) {
+			pr_kut("page %d: page order to high", i);
+			return -6;
+		}
+
+		if (page[i].order != order) {
+			pr_kut("page %d: wrong order value", i);
+			return -7;
+		}
+
+		if (page[i].gfp_mask != gfp_mask) {
+			pr_kut("page %d: wrong gfp_mask value", i);
+			return -8;
+		}
+
+		if (page[i].private != i) {
+			pr_kut("page %d: wrong private value", i);
+			return -9;
+		}
 	}
 
 	return 0;
@@ -861,6 +938,92 @@ exit:
 	return ret;
 }
 
+static int get_order_test(void)
+{
+	int orders[][2] = { /* [test value][expected result]*/
+		{ 0, 0 }, 
+		{ 1, 0 },
+		{ 1000, 0},
+		{ PAGE_SIZE - 1, 0 },
+		{ PAGE_SIZE, 0 },
+		{ PAGE_SIZE + 1, 1 },
+		{ 2*PAGE_SIZE - 1, 1 },
+		{ 2*PAGE_SIZE, 1 },
+		{ 2*PAGE_SIZE + 1, 2 },
+		{ 3*PAGE_SIZE + 1, 2 },
+		{ 4*PAGE_SIZE - 1, 2 },
+		{ 4*PAGE_SIZE, 2 },
+		{ 4*PAGE_SIZE + 1, 3 },
+		{ 7*PAGE_SIZE + 1, 3 },
+		{ 8*PAGE_SIZE - 1, 3 },
+		{ 8*PAGE_SIZE, 3 },
+		{ 8*PAGE_SIZE + 1, 4 }
+	};
+	int i, ret = 0;
+
+	for (i = 0; i < ARRAY_SZ(orders); i++) {
+		int val = get_order(orders[i][0]);
+
+		printf("get_order(%d): %d\n", orders[i][0], val);
+		if (val != orders[i][1])
+			ret = -1;
+	}
+
+	return ret;
+}
+
+static int alloc_free_pages_order(int order)
+{
+	struct page *page;
+	int ret = -1;
+
+	page = alloc_pages(GFP_KERNEL, order);
+	if (verify_page(page, GFP_KERNEL, order, 1 << order))
+		goto exit;
+
+	ret = 0;
+
+exit:
+	__free_pages(page, order);
+	return ret;
+}
+
+static int alloc_free_pages(void)
+{
+	int order;
+
+	for (order = 0; order <= MAX_ORDER; order++)
+		if (alloc_free_pages_order(order)) {
+			pr_kut("failed on order: %d", order);
+			return -1;
+	};
+
+	return 0;
+}
+
+static int mem_pressure_control(void)
+{
+	int i, mp[] = {
+		KUT_MEM_SCARCE,
+		KUT_MEM_AVERAGE,
+		KUT_MEM_ABUNDANCE,
+	};
+
+	for (i = 0; i < ARRAY_SZ(mp); i++) {
+		int ret;
+
+		kut_mem_pressure_set(mp[i]);
+
+		ret = alloc_free_pages();
+		if (ret) {
+			pr_kut("failed on memory presure level: %d", mp[i]);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -914,6 +1077,18 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "device: simple device hierarchy",
 		.func = simple_device_hierarchy,
+	},
+	{
+		.description = "mm: verify get_order() functionality",
+		.func = get_order_test,
+	},
+	{
+		.description = "mm: alloc_pages() and __free_pages()",
+		.func = alloc_free_pages,
+	},
+	{
+		.description = "mm: memory pressure configuration",
+		.func = mem_pressure_control,
 	},
 };
 
