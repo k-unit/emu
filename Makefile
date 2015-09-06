@@ -48,6 +48,9 @@ KUT_LIB_OBJS=bug.o
 # kut fs
 KUT_FS_OBJS=namei.o open.o
 
+# kut mm
+KUT_MM_OBJS=memory.o 
+
 # kut drivers
 KUT_DRIVERS_BASE_OBJS=core.o
 KUT_DRIVERS_MMC_OBJS=core/bus.o core/host.o host/kunit.o
@@ -59,6 +62,7 @@ KUT_DRIVERS_OBJS= \
 KUT_OBJS= \
 	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
 	$(patsubst %,fs/%,$(KUT_FS_OBJS)) \
+	$(patsubst %,mm/%,$(KUT_MM_OBJS)) \
 	$(patsubst %,drivers/%,$(KUT_DRIVERS_OBJS))
 
 #
