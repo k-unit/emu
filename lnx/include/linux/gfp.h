@@ -2,6 +2,8 @@
 #define _GFP_H_
 
 #include <linux/types.h>
+#include <linux/mm_types.h>
+#include <linux/mm.h>
 #include <linux/compiler.h>
 
 /* Plain integer GFP bitmasks. Do not use this directly. */
@@ -150,6 +152,9 @@
 
 /* 4GB DMA on some platforms */
 #define GFP_DMA32	__GFP_DMA32
+
+void __free_pages(struct page *page, unsigned int order);
+struct page *alloc_pages(gfp_t gfp_mask, unsigned int order);
 
 #endif
 
