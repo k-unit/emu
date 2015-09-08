@@ -4,6 +4,7 @@
 #include <linux/debugfs.h>
 #include <linux/list.h>
 #include <linux/mmzone.h>
+#include <linux/scatterlist.h>
 
 #include <asm-generic/page.h>
 
@@ -13,11 +14,15 @@
 
 #include <linux/kut_fs.h>
 #include <linux/kut_mmzone.h>
+#include <linux/kut_random.h>
 #include <linux/kut_bug.h>
 
 #include <asm-generic/bug.h>
 
 #include <unit_test.h>
+
+#include <stdlib.h>
+#include <string.h>
 #ifdef CONFIG_KUT_FS
 #include <sys/types.h>
 #include <dirent.h>
@@ -414,6 +419,55 @@ static int verify_page(struct page *page, gfp_t gfp_mask, int order,
 	return 0;
 }
 
+/**
+ * verify_sgtable - test all the fields of a struct sg_table and verify they're
+ * as expected
+ * @table: the sg table to test
+ * @nents: the number of entries expected in the sg table
+ * @gfp_mask: the expected gfp mask
+ * @mp: the level of memory pressure
+ */
+static int verify_sgtable(struct sg_table *table, unsigned int nents,
+	gfp_t gfp_mask, enum kut_mem_pressure mp)
+{
+	struct scatterlist *sgl;
+	int i;
+
+	if (!table) {
+		pr_kut("no sg table");
+		return -1;
+	}
+
+	if (table->nents != nents) {
+		pr_kut("wrong number of nents");
+		return -2;
+	}
+
+	if (table->orig_nents != nents) {
+		pr_kut("wrong number of original nents");
+		return -3;
+	}
+
+	for_each_sg(table->sgl, sgl, table->orig_nents, i) {
+		struct scatterlist dummy = {0};
+
+		if (sg_is_last(sgl))
+			sg_mark_end(&dummy);
+
+		if (memcmp(sgl, &dummy, sizeof(struct scatterlist))) {
+			int current_chain = i/SG_MAX_SINGLE_ALLOC;
+			int remainder = i - current_chain * SG_MAX_SINGLE_ALLOC;
+
+			pr_kut("sgl[%d][%d] is not initialized", current_chain,
+				remainder);
+
+			return -4;
+		}
+	}
+
+	return 0;
+}
+
 static int bug_on_test(void)
 {
 	int ret;
@@ -424,6 +478,62 @@ static int bug_on_test(void)
 	KUT_CAN_BUG_ON(ret, BUG_ON(1));
 
 	return !ret;
+}
+
+static void sg_table_teardown(struct sg_table *table)
+{
+	struct scatterlist *sg;
+	int i;
+
+	if (!table->sgl)
+		return;
+
+	for_each_sg(table->sgl, sg, table->orig_nents, i) {
+		struct page *page;
+		
+		page = sg_page(sg);
+		if (!page)
+			break;
+
+		__free_pages(page, kut_mem_pressure_get() - 1);
+	}
+	sg_free_table(table);
+}
+
+static int sg_table_setup(struct sg_table *table, int nents, int chunk_size,
+	gfp_t gfp_mask)
+{
+	struct scatterlist *sg;
+	int i, max_chunk_size = 1 << (kut_mem_pressure_get() - 1);
+
+	/* chunk_size cannot exceed the maximum page segment allocation size */
+	if (max_chunk_size < chunk_size)
+		return -1;
+
+	/* unless otherwise specified, use maximum segment allocation size */
+	if (!chunk_size)
+		chunk_size = max_chunk_size;
+
+	if (sg_alloc_table(table, nents, gfp_mask))
+		goto error;
+
+	for_each_sg(table->sgl, sg, table->orig_nents, i) {
+		struct page *page;
+		
+		page = alloc_pages(gfp_mask, kut_mem_pressure_get() - 1);
+		if (!page)
+			goto error;
+
+		sg_set_page(sg, page, chunk_size * PAGE_SIZE, 0);
+	}
+
+	return 0;
+
+error:
+	/* allocated lists and pages must be freed by sg_table_teardown */
+	pr_kut("sg_alloc_table failed");
+
+	return -ENOMEM;
 }
 
 static int dentry_create_test(char *name, umode_t mode, bool is_dir)
@@ -1024,6 +1134,79 @@ static int mem_pressure_control(void)
 	return 0;
 }
 
+static int sg_table_test(int nents)
+{
+	struct sg_table table = {0};
+	int ret = -1;
+
+	if (sg_alloc_table(&table, nents, GFP_KERNEL)) {
+		pr_kut("sg_alloc_table failed");
+		return -1;
+	}
+	if (verify_sgtable(&table, nents, GFP_KERNEL, KUT_MEM_SCARCE))
+		goto exit;
+
+	ret = 0;
+exit:
+
+	sg_free_table(&table);
+	return ret;
+}
+
+static int sg_table_test_no_chain(void)
+{
+	return sg_table_test(SG_MAX_SINGLE_ALLOC);
+}
+
+static int sg_table_test_multi_chain(void)
+{
+	int nents = 3 * SG_MAX_SINGLE_ALLOC + (SG_MAX_SINGLE_ALLOC >> 1);
+
+	return sg_table_test(nents);
+}
+
+static int sg_copy_buffer_test(void)
+{
+	struct sg_table table = {0};
+	int nents, alloc_size;
+	char *buf1 = NULL, *buf2 = NULL;
+	int ret = -1;
+
+	kut_mem_pressure_set(KUT_MEM_SCARCE);
+
+	nents = 3 * SG_MAX_SINGLE_ALLOC + (SG_MAX_SINGLE_ALLOC >> 1);
+	alloc_size = nents * (PAGE_SIZE << (kut_mem_pressure_get() - 1));
+
+	buf1 = calloc(alloc_size, sizeof(char));
+	if (!buf1) {
+		pr_kut("could not allocate 1st test buffer");
+		goto exit;
+	}
+	buf2 = calloc(alloc_size, sizeof(char));
+	if (!buf2) {
+		pr_kut("could not allocate 2nd test buffer");
+		goto exit;
+	}
+
+	if (sg_table_setup(&table, nents, 0, GFP_KERNEL))
+		goto exit;
+
+	kut_random_buf(buf1, alloc_size);
+
+	sg_copy_from_buffer(table.sgl, nents, buf1, alloc_size);
+	sg_copy_to_buffer(table.sgl, nents, buf2, alloc_size);
+
+	ret = memcmp(buf1, buf2, alloc_size);
+
+exit:
+	sg_table_teardown(&table);
+	sg_free_table(&table);
+	free(buf2);
+	free(buf1);
+
+	return ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -1089,6 +1272,18 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "mm: memory pressure configuration",
 		.func = mem_pressure_control,
+	},
+	{
+		.description = "sg: scatter-gather table - no chain",
+		.func = sg_table_test_no_chain,
+	},
+	{
+		.description = "sg: scatter-gather table - multi chain",
+		.func = sg_table_test_multi_chain,
+	},
+	{
+		.description = "sg: copy to/from buffer",
+		.func = sg_copy_buffer_test,
 	},
 };
 
