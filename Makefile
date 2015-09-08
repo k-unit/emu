@@ -26,10 +26,10 @@ LNX_DRIVERS_OBJS= \
 		  $(patsubst %,mmc/%,$(LNX_DRIVERS_MMC_OBJS))
 
 # lnx lib
-LNX_LIB_OBJS=kstrtox.o
+LNX_LIB_OBJS=kstrtox.o scatterlist.o
 
 # lnx mm
-LNX_MM_OBJS=page_alloc.o 
+LNX_MM_OBJS=page_alloc.o kmemleak.o
 
 # all lnx objs
 LNX_OBJS= \

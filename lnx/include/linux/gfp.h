@@ -153,6 +153,12 @@
 /* 4GB DMA on some platforms */
 #define GFP_DMA32	__GFP_DMA32
 
+#define __get_free_page(gfp_mask) \
+		__get_free_pages((gfp_mask), 0)
+#define free_page(addr) free_pages((addr), 0)
+
+unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order);
+void free_pages(unsigned long addr, unsigned int order);
 void __free_pages(struct page *page, unsigned int order);
 struct page *alloc_pages(gfp_t gfp_mask, unsigned int order);
 

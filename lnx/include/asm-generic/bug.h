@@ -23,7 +23,13 @@
 		} \
 	} while (0)
 
+#define BUG() __BUG_ON(1, 1)
 #define BUG_ON(condition) __BUG_ON(condition, 1)
+#define VM_BUG_ON(condition) BUG_ON(condition)
 #define WARN_ON(condition) __BUG_ON(condition, 0)
+#define WARN_ON_ONCE(condition) ({ \
+	WARN_ON(condition); \
+	condition; \
+})
 #endif
 

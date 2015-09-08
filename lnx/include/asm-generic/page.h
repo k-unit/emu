@@ -3,9 +3,14 @@
 
 #include <linux/gfp.h>
 
+#include "../../../kut/mm/memory.h"
+
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define PAGE_MASK (~(PAGE_SIZE-1))
+
+#define virt_to_page(addr) kut_mem_lookup_page_by_virtual(addr)
+#define page_to_virt(addr) kut_mem_lookup_virtual_by_page(addr)
 
 /**
  * get_order - Determine the allocation order of a memory size

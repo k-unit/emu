@@ -7,7 +7,9 @@ struct page {
 	void *virtual;
 	int order;
 	gfp_t gfp_mask;
-	bool is_first;
+	union {
+		unsigned long private;
+	};
 };
 
 #endif
