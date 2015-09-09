@@ -82,6 +82,8 @@
 	type __max2 = (y);			\
 	__max1 > __max2 ? __max1: __max2; })
 
+# define might_sleep() do {} while (0)
+
 int __must_check kstrtoull(const char *s, unsigned int base,
 	unsigned long long *res);
 int __must_check kstrtoll(const char *s, unsigned int base, long long *res);

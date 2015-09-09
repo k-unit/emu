@@ -197,5 +197,80 @@ int sg_alloc_table(struct sg_table *table, unsigned int nents, gfp_t gfp_mask);
  */
 #define SG_MAX_SINGLE_ALLOC		(PAGE_SIZE / sizeof(struct scatterlist))
 
+/*
+ * sg page iterator
+ *
+ * Iterates over sg entries page-by-page.  On each successful iteration,
+ * you can call sg_page_iter_page(@piter) and sg_page_iter_dma_address(@piter)
+ * to get the current page and its dma address. @piter->sg will point to the
+ * sg holding this page and @piter->sg_pgoffset to the page's page offset
+ * within the sg. The iteration will stop either when a maximum number of sg
+ * entries was reached or a terminating sg (sg_last(sg) == true) was reached.
+ */
+struct sg_page_iter {
+	struct scatterlist	*sg;		/* sg holding the page */
+	unsigned int		sg_pgoffset;	/* page offset within the sg */
+
+	/* these are internal states, keep away */
+	unsigned int		__nents;	/* remaining sg entries */
+	int			__pg_advance;	/* nr pages to advance at the
+						 * next step */
+};
+
+bool __sg_page_iter_next(struct sg_page_iter *piter);
+void __sg_page_iter_start(struct sg_page_iter *piter,
+			  struct scatterlist *sglist, unsigned int nents,
+			  unsigned long pgoffset);
+/**
+ * sg_page_iter_page - get the current page held by the page iterator
+ * @piter:	page iterator holding the page
+ */
+static inline struct page *sg_page_iter_page(struct sg_page_iter *piter)
+{
+	return nth_page(sg_page(piter->sg), piter->sg_pgoffset);
+}
+
+/*
+ * Mapping sg iterator
+ *
+ * Iterates over sg entries mapping page-by-page.  On each successful
+ * iteration, @miter->page points to the mapped page and
+ * @miter->length bytes of data can be accessed at @miter->addr.  As
+ * long as an interation is enclosed between start and stop, the user
+ * is free to choose control structure and when to stop.
+ *
+ * @miter->consumed is set to @miter->length on each iteration.  It
+ * can be adjusted if the user can't consume all the bytes in one go.
+ * Also, a stopped iteration can be resumed by calling next on it.
+ * This is useful when iteration needs to release all resources and
+ * continue later (e.g. at the next interrupt).
+ */
+
+#define SG_MITER_ATOMIC		(1 << 0) /* use kmap_atomic */
+#define SG_MITER_TO_SG		(1 << 1) /* flush back to phys on unmap */
+#define SG_MITER_FROM_SG	(1 << 2) /* nop */
+
+struct sg_mapping_iter {
+	/* the following three fields can be accessed directly */
+	struct page		*page;		/* currently mapped page */
+	void			*addr;		/* pointer to the mapped area */
+	size_t			length;		/* length of the mapped area */
+	size_t			consumed;	/* number of consumed bytes */
+	struct sg_page_iter	piter;		/* page iterator */
+
+	/* these are internal states, keep away */
+	unsigned int		__offset;	/* offset within page */
+	unsigned int		__remaining;	/* remaining bytes on page */
+	unsigned int		__flags;
+};
+
+void sg_miter_start(struct sg_mapping_iter *miter, struct scatterlist *sgl,
+		    unsigned int nents, unsigned int flags);
+bool sg_miter_next(struct sg_mapping_iter *miter);
+void sg_miter_stop(struct sg_mapping_iter *miter);
+size_t sg_copy_from_buffer(struct scatterlist *sgl, unsigned int nents,
+	void *buf, size_t buflen);
+size_t sg_copy_to_buffer(struct scatterlist *sgl, unsigned int nents,
+	void *buf, size_t buflen);
 #endif
 

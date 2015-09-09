@@ -9,6 +9,18 @@
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 #define PAGE_MASK (~(PAGE_SIZE-1))
 
+#define nth_page(page, n) ((page) + (n))
+
+/* align addr on a size boundary - adjust address up/down if needed */
+#define _ALIGN_UP(addr,size)	(((addr)+((size)-1))&(~((size)-1)))
+#define _ALIGN_DOWN(addr,size)	((addr)&(~((size)-1)))
+
+/* align addr on a size boundary - adjust address up if needed */
+#define _ALIGN(addr,size)     _ALIGN_UP(addr,size)
+
+/* to align the pointer to the (next) page boundary */
+#define PAGE_ALIGN(addr)	_ALIGN(addr, PAGE_SIZE)
+
 #define virt_to_page(addr) kut_mem_lookup_page_by_virtual(addr)
 #define page_to_virt(addr) kut_mem_lookup_virtual_by_page(addr)
 
