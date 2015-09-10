@@ -56,3 +56,15 @@ void mmc_free_host(struct mmc_host *host)
 }
 EXPORT_SYMBOL(mmc_free_host);
 
+int mmc_power_save_host(struct mmc_host *host)
+{
+	return 0;
+}
+EXPORT_SYMBOL(mmc_power_save_host);
+
+int mmc_power_restore_host(struct mmc_host *host)
+{
+	return 0;
+}
+EXPORT_SYMBOL(mmc_power_restore_host);
+

@@ -31,5 +31,8 @@ static inline void *mmc_priv(struct mmc_host *host)
 {
 	return (void*)host->private;
 }
+
+int mmc_power_save_host(struct mmc_host *host);
+int mmc_power_restore_host(struct mmc_host *host);
 #endif
 
