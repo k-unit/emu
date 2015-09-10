@@ -10,6 +10,8 @@ struct mmc_card {
 	struct mmc_host *host;
 	struct device dev; /* the device */
 	bool md_main;
+
+	struct list_head xfer;
 };
 
 static inline int mmc_card_mmc(struct mmc_card *card)

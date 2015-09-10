@@ -1,5 +1,7 @@
 #include <linux/mmc/host.h>
 
+#include <linux/mmc/kut_bus.h>
+
 /**
  *	mmc_claim_host - exclusively claim a host
  *	@host: mmc host to claim
@@ -34,4 +36,18 @@ int mmc_try_claim_host(struct mmc_host *host)
 	host->claimed = 1;
 	return 1;
 }
+
+/*
+ * transfer with certain parameters
+ */
+int mmc_simple_transfer(struct mmc_card *card,
+	struct scatterlist *sg, unsigned sg_len, unsigned dev_addr,
+	unsigned blocks, unsigned blksz, int write)
+{
+	unsigned long length = blocks * blksz;
+
+	kut_mmc_xfer_add(card, sg, sg_len, dev_addr, length, write);
+	return 0;
+}
+EXPORT_SYMBOL(mmc_simple_transfer);
 
