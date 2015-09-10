@@ -48,6 +48,9 @@ KUT_LIB_OBJS=bug.o
 # kut fs
 KUT_FS_OBJS=namei.o open.o
 
+# kut lib
+KUT_LIB_OBJS=random32.o
+
 # kut mm
 KUT_MM_OBJS=memory.o 
 
@@ -62,6 +65,7 @@ KUT_DRIVERS_OBJS= \
 KUT_OBJS= \
 	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
 	$(patsubst %,fs/%,$(KUT_FS_OBJS)) \
+	$(patsubst %,lib/%,$(KUT_LIB_OBJS)) \
 	$(patsubst %,mm/%,$(KUT_MM_OBJS)) \
 	$(patsubst %,drivers/%,$(KUT_DRIVERS_OBJS))
 
