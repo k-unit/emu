@@ -10,6 +10,7 @@ struct mmc_host;
 struct mmc_card;
 int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 	unsigned int timeout_ms);
+int mmc_send_ext_csd(struct mmc_card *card, u8 *ext_csd);
 
 void mmc_claim_host(struct mmc_host *host);
 void mmc_release_host(struct mmc_host *host);

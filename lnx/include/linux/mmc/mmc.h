@@ -75,5 +75,9 @@
 #define EXT_CSD_BKOPS_SUPPORT		502	
 #define EXT_CSD_HPI_FEATURES		503	
 
+#define EXT_CSD_CMD_SET_NORMAL		(1<<0)
+#define EXT_CSD_CMD_SET_SECURE		(1<<1)
+#define EXT_CSD_CMD_SET_CPSECURE	(1<<2)
+
 #endif
 
