@@ -16,7 +16,7 @@ LNX_FS_OBJS=namei.o libfs.o \
 	$(patsubst %,debugfs/%,$(LNX_DEBUGFS_OBJS))
 
 # lnx drivers
-LNX_DRIVERS_BASE_OBJS=core.o
+LNX_DRIVERS_BASE_OBJS=core.o firmware_class.o
 LNX_DRIVERS_MMC_CORE_OBJS=core.o host.o mmc.o mmc_ops.o
 LNX_DRIVERS_MMC_OBJS= \
 		      $(patsubst %,core/%,$(LNX_DRIVERS_MMC_CORE_OBJS))
