@@ -51,3 +51,9 @@ int mmc_simple_transfer(struct mmc_card *card,
 }
 EXPORT_SYMBOL(mmc_simple_transfer);
 
+int mmc_flush_cache(struct mmc_card *card)
+{
+	return 0;
+}
+EXPORT_SYMBOL(mmc_flush_cache);
+
