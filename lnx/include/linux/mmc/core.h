@@ -11,6 +11,7 @@ struct mmc_card;
 int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 	unsigned int timeout_ms);
 int mmc_send_ext_csd(struct mmc_card *card, u8 *ext_csd);
+int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd);
 
 int mmc_flush_cache(struct mmc_card *card);
 

@@ -31,11 +31,11 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	 * By default, hosts do not support SGIO or large requests.
 	 * They have to set these according to their abilities.
 	 */
-	host->max_segs = BLOCKS_TO_BYTES(1);
-	host->max_seg_size = BLOCKS_TO_BYTES(128);
+	host->max_segs = 1 * 512;
+	host->max_seg_size = 128 * 512;
 
-	host->max_req_size = BLOCKS_TO_BYTES(65536);
-	host->max_blk_count = BYTES_TO_BLOCKS(host->max_req_size);
+	host->max_req_size = 65536 * 512;
+	host->max_blk_count = 65536;
 
 	return host;
 }

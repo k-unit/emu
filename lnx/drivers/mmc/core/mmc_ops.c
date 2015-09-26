@@ -2,6 +2,12 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/mmc.h>
 
+#include <linux/mmc/kut_core.h>
+
+#include "../../../../kut/drivers/mmc/core/mmc_ops.h"
+
+#include <string.h>
+
 int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 	unsigned int timeout_ms)
 {
@@ -21,9 +27,14 @@ EXPORT_SYMBOL_GPL(mmc_switch);
 
 int mmc_send_ext_csd(struct mmc_card *card, u8 *ext_csd)
 {
-	memset(ext_csd, 0, 512);
+	int ret;
 
-	ext_csd[EXT_CSD_OPERATION_CODE_TIMEOUT] = 0x1;
+	/* verify ext_csd has been initialized legaly during pre-test */
+	ret = kut_ext_csd_verify_configuration();
+	if (ret)
+		return ret;
+
+	memcpy(ext_csd, kut_ext_csd, 512);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mmc_send_ext_csd);

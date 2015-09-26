@@ -1,5 +1,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/core.h>
+#include <linux/mmc/mmc.h>
 
 #include <linux/kut_device.h>
 #include <linux/mmc/kut_host.h>
@@ -80,6 +82,7 @@ int kut_mmc_init(struct device *bus, struct kunit_host **host,
 	}
 
 	if (card) {
+		u8 ext_csd[512];
 		struct device *md_dev;
 		int p;
 
@@ -96,6 +99,11 @@ int kut_mmc_init(struct device *bus, struct kunit_host **host,
 			if (!dev)
 				goto error;
 		}
+
+		if (mmc_send_ext_csd(__card, ext_csd))
+			goto error;
+		if (mmc_read_ext_csd(__card, ext_csd))
+			goto error;
 	}
 
 	if (host)

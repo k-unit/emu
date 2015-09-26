@@ -1,9 +1,11 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/card.h>
+#include <linux/mmc/mmc.h>
 
 #include <linux/kut_device.h>
 #include <linux/kut_random.h>
 #include <linux/mmc/kut_bus.h>
+#include <linux/mmc/kut_core.h>
 
 static int __mmc_xfer_add(struct mmc_card *card, struct scatterlist *sg,
 	unsigned nents, unsigned long addr, unsigned long length, bool write,
@@ -34,6 +36,10 @@ static int __mmc_xfer_add(struct mmc_card *card, struct scatterlist *sg,
 	}
 
 	list_add_tail(&xfer->list, &card->xfer);
+
+	kut_mmc_ext_csd_set(EXT_CSD_NUM_OF_FW_SEC_PROG,
+		BYTES_TO_BLOCKS((u32)length));
+
 	return 0;
 }
 
