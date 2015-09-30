@@ -3,6 +3,7 @@
 #include <linux/device.h>
 #include <linux/debugfs.h>
 #include <linux/list.h>
+#include <linux/pagemap.h>
 #include <linux/mmzone.h>
 #include <linux/scatterlist.h>
 
@@ -16,6 +17,9 @@
 #include <linux/kut_mmzone.h>
 #include <linux/kut_random.h>
 #include <linux/kut_bug.h>
+#include <linux/mmc/kut_host.h>
+#include <linux/mmc/kut_bus.h>
+#include <linux/mmc/kut_core.h>
 
 #include <asm-generic/bug.h>
 
@@ -466,6 +470,173 @@ static int verify_sgtable(struct sg_table *table, unsigned int nents,
 	}
 
 	return 0;
+}
+
+/**
+ * verify_host_controller - test all the fields of the kunit host controller and
+ * verify they're as expected
+ * @bus: the host controller's parent device
+ * @hc: the host controller to test
+ * @mmc: an optional struct mmc_host (can be NULL)
+ */
+static int verify_host_controller(struct device *bus, struct kunit_host *hc,
+	struct mmc_host *mmc)
+{
+	char kunit_host_name[DEV_MAX_NAME] = KUNIT_HOST_NAME;
+
+	if (!hc) {
+		pr_kut("no host controller");
+		return -1;
+	}
+
+	if (mmc) {
+		int len = strlen(kunit_host_name);
+
+		snprintf(kunit_host_name + len, DEV_MAX_NAME - len, ".%d",
+			mmc->index);
+	}
+
+	if (verify_device(&hc->dev, &hc->dev, bus, kunit_host_name, false,
+		mmc ? true : false)) {
+		return -2;
+	}
+
+	if (hc->mmc != mmc) {
+		pr_kut("wrong mmc");
+		return -3;
+	}
+
+	return 0;
+}
+
+/**
+ * verify_mmc_host - test all the fields of an mmc host and verify they're as
+ * expected
+ * @host: the host to test
+ * @hc: an optional kunit host controller (can be NULL)
+ * @siblings: are any siblings expected
+ * @card: an optional mmc card (can be NULL)
+ * @private: host private data
+ */
+static int verify_mmc_host(struct mmc_host *host, struct kunit_host *hc,
+	bool siblings, struct mmc_card *card, void *private)
+{
+	char name[10];
+
+	if (!host) {
+		pr_kut("no host");
+		return -1;
+	}
+
+	if (host->card != card) {
+		pr_kut("wrong card");
+	}
+
+	snprintf(name, sizeof(name), "mmc%d", host->index);
+	if (verify_device(&host->class_dev, &host->class_dev,
+		hc ? &hc->dev : NULL, name, siblings, card ? true : false)) {
+		return -2;
+	}
+
+	if (host->max_seg_size != 128 * 512) {
+		pr_kut("wrong max_seg_size");
+		return -3;
+	}
+	if (host->max_segs != 1 * 512) {
+		pr_kut("wrong max_segs");
+		return -4;
+	}
+	if (host->max_req_size != 65536 * 512) {
+		pr_kut("wrong max_req_size");
+		return -5;
+	}
+	if (host->max_blk_count != 65536) {
+		pr_kut("wrong max_blk_count");
+		return -7;
+	}
+
+	if (host->private != private) {
+		pr_kut("wrong private");
+		return -8;
+	}
+
+	return 0;
+}
+
+/**
+ * verify_mmc_card - test all the fields of an mmc card and verify they're as
+ * expected
+ * @card: the card to test
+ * @index: card index number within the host
+ * @md_main: is a main partition device expected
+ * @partitions: are any partitions expected
+ */
+static int verify_mmc_card(struct mmc_card *card, int index, bool md_main,
+	bool partitions)
+{
+	char name[20];
+
+	if (!card) {
+		pr_kut("no card");
+		return -1;
+	}
+
+	if (!card->host) {
+		pr_kut("no card->host");
+		return -2;
+	}
+
+	snprintf(name, sizeof(name), "%s:%.4d", mmc_hostname(card->host),
+		index);
+	if (card->md_main) {
+		struct device_private *md_dev_private;
+
+		if (!md_main) {
+			pr_kut("should not have md_main");
+			return -3;
+		}
+
+		if (verify_device(&card->dev, &card->dev,
+			&card->host->class_dev, name, false, true)) {
+			return -4;
+		}
+
+		if ((card->xfer.next != card->xfer.prev) ||
+			!list_empty(&card->xfer)) {
+			pr_kut("card xfer list is not correctly initialized");
+			return -5;
+		}
+
+		md_dev_private = list_entry(card->dev.p->klist_children.next,
+			struct device_private, knode_parent);
+		snprintf(name, sizeof(name), "mmcblk%d", card->host->index);
+		if (verify_device(md_dev_private->device, NULL, &card->dev,
+			name, false, partitions)) {
+			return -6;
+		}
+
+		if (md_dev_private->device != kut_mmc_card_md_main(card)) {
+			pr_kut("kut_mmc_card_md_main() returns wrong device");
+			return -7;
+		}
+	} else {
+		if (md_main) {
+			pr_kut("should have md_main");
+			return -8;
+		}
+
+		if (verify_device(&card->dev, &card->dev,
+			&card->host->class_dev, name, false, partitions)) {
+			return -9;
+		}
+	}
+
+	return 0;
+}
+
+static int length2nents(int length)
+{
+	return DIV_ROUND_UP(length, PAGE_SIZE << (kut_mem_pressure_get() - 1));
 }
 
 static int bug_on_test(void)
@@ -1207,6 +1378,251 @@ exit:
 	return ret;
 }
 
+static int mmc_init_host_controller_test(void)
+{
+	struct device bus = {0};
+	struct kunit_host *hc;
+	int ret;
+
+	kut_dev_init(&bus, NULL, "bus");
+
+	hc = kut_kunit_host_alloc(&bus);
+	ret = verify_host_controller(&bus, hc, NULL) ? -1 : 0;
+	kut_kunit_host_free(hc);
+
+	kut_dev_uninit(&bus);
+	return ret;
+}
+
+static int mmc_init_host_test(void)
+{
+	struct mmc_host *host;
+	int ret;
+
+	host = mmc_alloc_host(0, NULL);
+	ret = verify_mmc_host(host, NULL, false, NULL, NULL);
+	mmc_free_host(host);
+
+	return ret;
+}
+
+static int mmc_init_card_test(void)
+{
+	struct mmc_host host;
+	struct mmc_card *card = NULL;
+	struct device *md_dev, *part_dev;
+	int ret = -1;
+
+	memset(&host, 0, sizeof(struct mmc_host));
+	kut_dev_init(&host.class_dev, NULL, "parent");
+	if (verify_device(&host.class_dev, &host.class_dev, NULL, "parent",
+		false, false)) {
+		goto exit;
+	}
+
+	host.index = 0;
+
+	/* card without md_data */
+	card = kut_mmc_alloc_card(&host, NULL, false);
+	if (verify_mmc_card(card, 1, false, false))
+		goto exit;
+
+	part_dev = kut_mmc_add_partition(card, 1);
+	if (verify_device(part_dev, NULL, &card->dev, "parent:0001p1", false,
+		false)) {
+		goto exit;
+	}
+	if (verify_mmc_card(card, 1, false, true))
+		goto exit;
+
+	kut_mmc_free_card(card);
+
+	/* card with md_data */
+	card = kut_mmc_alloc_card(&host, NULL, true);
+	if (verify_mmc_card(card, 1, true, false))
+		goto exit;
+	md_dev = kut_mmc_card_md_main(card);
+	part_dev = kut_mmc_add_partition(card, 1);
+	if (verify_device(part_dev, NULL, md_dev, "mmcblk0p1", false, false))
+		goto exit;
+	if (verify_mmc_card(card, 1, true, true))
+		goto exit;
+
+	ret = 0;
+exit:
+	kut_mmc_free_card(card);
+	kut_dev_uninit(&host.class_dev);
+	return ret;
+}
+ 
+static int mmc_init_test(void)
+{
+	struct kunit_host *hc;
+	struct mmc_host *host;
+	struct mmc_card *card;
+	int ret;
+
+	/* test host controller only */
+	ret = kut_mmc_init(NULL, &hc, NULL, NULL, 0);
+	if (ret || verify_host_controller(NULL, hc, NULL))
+		return -1;
+	kut_mmc_uninit(hc, NULL, NULL);
+
+	/* test mmc host only */
+	ret = kut_mmc_init(NULL, NULL, &host, NULL, 0);
+	if (ret || verify_mmc_host(host, NULL, false, NULL, NULL))
+		return -1;
+	kut_mmc_uninit(NULL, host, NULL);
+
+	/* test mmc host and card only */
+	ret = kut_mmc_init(NULL, NULL, &host, &card, 0);
+	if (ret || verify_mmc_host(host, NULL, false, card, NULL) ||
+		verify_mmc_card(card, 1, true, 0)) {
+		return -1;
+	}
+	kut_mmc_uninit(NULL, host, card);
+
+	/* test host controller, mmc host and card */
+	ret = kut_mmc_init(NULL, &hc, &host, &card, 2);
+	if (ret || verify_host_controller(NULL, hc, host) ||
+		verify_mmc_host(host, hc, false, card, hc) ||
+		verify_mmc_card(card, 1, true, true)) {
+		return -1;
+	}
+	kut_mmc_uninit(hc, host, card);
+
+	return 0;
+}
+
+static int mmc_simple_transfer_test(void)
+{
+	struct mmc_host *host = NULL;
+	struct mmc_card *card = NULL;
+	struct list_head xfer_expected = {0};
+	struct kut_mmc_card_xfer segment = {0};
+	struct sg_table table;
+	int nents, ret = -1;
+	
+	/* setup mmc card and host */
+	if (kut_mmc_init(NULL, NULL, &host, &card, 0))
+		return -1;
+
+	/* set memory pressure */
+	kut_mem_pressure_set(KUT_MEM_SCARCE);
+
+	/* initialize expected transfer list */
+	INIT_LIST_HEAD(&xfer_expected);
+
+	/* setup transfer segment */
+	segment.length = PAGE_SIZE << kut_mem_pressure_get(); /* spill over! */
+	segment.buf = calloc(segment.length, sizeof(char));
+	if (!segment.buf)
+		goto exit;
+
+	INIT_LIST_HEAD(&segment.list);
+
+	segment.write = true;
+	segment.addr = 10 * PAGE_SIZE;
+
+	list_add(&segment.list, &xfer_expected);
+
+	/* setup sg_table for transferring segment */
+	nents = length2nents(segment.length);
+	if (sg_table_setup(&table, nents, 0, GFP_KERNEL))
+		goto exit;
+
+	/* write scenario */
+
+	/* test: wrong addr */
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	mmc_simple_transfer(card, table.sgl, nents, 0, segment.length / 512,
+		512, segment.write);
+	if (!kut_mmc_xfer_check(card, &xfer_expected)) /* should fail */
+		goto exit;
+
+	/* test: wrong length */
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	mmc_simple_transfer(card, table.sgl, nents, segment.addr,
+		(segment.length-1) / 512, 512, segment.write);
+	if (!kut_mmc_xfer_check(card, &xfer_expected)) /* should fail */
+		goto exit;
+
+	/* test: wrong io direction */
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	mmc_simple_transfer(card, table.sgl, nents, segment.addr,
+		segment.length / 512, 512, !segment.write);
+	if (!kut_mmc_xfer_check(card, &xfer_expected)) /* should fail */
+		goto exit;
+
+	/* test: wrong data */
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	mmc_simple_transfer(card, table.sgl, nents, segment.addr,
+		segment.length / 512, 512, segment.write);
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	if (!kut_mmc_xfer_check(card, &xfer_expected)) /* should fail */
+		goto exit;
+
+	/* test: perfect match */
+	kut_random_buf(segment.buf, segment.length);
+	sg_copy_from_buffer(table.sgl, nents, segment.buf, segment.length);
+	mmc_simple_transfer(card, table.sgl, nents, segment.addr,
+		segment.length / 512, 512, segment.write);
+	if (kut_mmc_xfer_check(card, &xfer_expected)) /* should pass */
+		goto exit;
+
+	/* read scenario */
+	sg_table_teardown(&table);
+	if (sg_table_setup(&table, nents, 0, GFP_KERNEL))
+		goto exit;
+
+	segment.write = false;
+	segment.addr = 512;
+	memset(segment.buf, 0, segment.length);
+
+	mmc_simple_transfer(card, table.sgl, nents, segment.addr,
+		segment.length / 512, 512, segment.write);
+	sg_copy_to_buffer(table.sgl, nents, segment.buf, segment.length);
+	if (kut_mmc_xfer_check(card, &xfer_expected)) /* should pass */
+		goto exit;
+
+	ret = 0;
+
+exit:
+	sg_table_teardown(&table);
+	free(segment.buf);
+	kut_mmc_uninit(NULL, host, card);
+
+	return ret;
+}
+
+static int mmc_ext_csd_version_test(void)
+{
+	struct mmc_host *host = NULL;
+	struct mmc_card *card = NULL;
+	int i, ret = -1;
+	
+	/* setup mmc card and host */
+	if (kut_mmc_init(NULL, NULL, &host, &card, 0))
+		return -1;
+
+	/* test valid versions */
+	for (i = 0; i < 10; i++) {
+		int valid = kut_mmc_ext_csd_set_rev(i) ? 0 : 1;
+
+		if ((i < 9) ^ valid)
+			goto exit;
+	}
+	ret = 0;
+exit:
+	kut_mmc_uninit(NULL, host, card);
+	return ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
@@ -1284,6 +1700,30 @@ struct single_test kernel_tests[] = {
 	{
 		.description = "sg: copy to/from buffer",
 		.func = sg_copy_buffer_test,
+	},
+	{
+		.description = "mmc: simple host controller test",
+		.func = mmc_init_host_controller_test,
+	},
+	{
+		.description = "mmc: simple host test",
+		.func = mmc_init_host_test,
+	},
+	{
+		.description = "mmc: simple card test",
+		.func = mmc_init_card_test,
+	},
+	{
+		.description = "mmc: complete init test",
+		.func = mmc_init_test,
+	},
+	{
+		.description = "mmc: simple transfer test",
+		.func = mmc_simple_transfer_test,
+	},
+	{
+		.description = "mmc: ext_csd version test",
+		.func = mmc_ext_csd_version_test,
 	},
 };
 
