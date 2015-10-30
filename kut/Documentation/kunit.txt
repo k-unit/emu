@@ -1,0 +1,39 @@
+Topics to be documented
+=======================
+
+- dev tree layout, kut vs. lnx
+- include scheme
+  - lnx/include
+  - kut/include
+  - patches/include
+  - "../kut/..."
+- dentry
+- virtual file
+- devices, static vs. dynamic
+- memory pressure
+- virtual memory management
+- data transfer verification
+- ext csd setting and spec complience
+- BUG_ON()
+- documentation scheme (kut full api)
+
+Development tree layout
+=======================
+The kUnit development tree is divided into two subdirectories, namely lnx and
+kut.
+
+lnx
+---
+The lnx directory consists of all the kernel API emulation. Any function
+within the kernel which is required by code being tested (the unit code) is
+emulated in lnx by a - usually much simpler - unit test version. The emulation
+function exports the exact same prototype and provides the same semantics as its
+kernel counterpart, at least to the extent that is relevant for testing.
+
+The directory and file layout of lnx rigidly mimics that of the kernel.
+For example:
+The implementation of sg_copy_to_buffer() in the kernel is in lib/scatterlist.c,
+and its prototype is exported in include/linux/scatterlist.h.
+The implementation of the emulation version of sg_copy_to_buffer() in kUnit will
+thus be in lnx/lib/scatterlist.c, and its prototype will be exported in
+lnx/include/linux/scatterlist.h.
