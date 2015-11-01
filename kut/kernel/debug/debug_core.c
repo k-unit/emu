@@ -1,6 +1,8 @@
 #include <linux/fs.h>
 #include <linux/list.h>
 
+#include <asm-generic/bug.h>
+
 #include <unit_test.h>
 #ifdef CONFIG_KUT_FS
 #include <sys/types.h>
@@ -101,12 +103,28 @@ static int reset_dir(char *path)
 }
 #endif
 
+static int bug_on_test(void)
+{
+	int ret;
+
+	kut_bug_on_do_exit_set(false);
+
+	pr_kut("calling BUG_ON(1)...");
+	KUT_CAN_BUG_ON(ret, BUG_ON(1));
+
+	return !ret;
+}
+
 static int pre_post_test(void)
 {
 	return reset_dir(KSRC);
 }
 
 struct single_test kernel_tests[] = {
+	{
+		.description = "lib: BUG_ON with no exit",
+		.func = bug_on_test,
+	},
 };
 
 struct unit_test ut_kernel = {
