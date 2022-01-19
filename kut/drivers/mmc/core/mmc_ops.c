@@ -407,8 +407,13 @@ int kut_ext_csd_verify_configuration(void)
 
 	/* verify field dependencies */
 	if (ext_csd_val_to_u32(EXT_CSD_PRE_LOADING_DATA_SIZE) >
-		ext_csd_val_to_u32(EXT_CSD_MAX_PRE_LOADING_DATA_SIZE)) {
-			BUG_ON(-EINVAL);
+			ext_csd_val_to_u32(EXT_CSD_MAX_PRE_LOADING_DATA_SIZE)) {
+		BUG_ON(-EINVAL);
+	}
+
+	if (!kut_ext_csd[EXT_CSD_FFU_FEATURES] &&
+			kut_ext_csd[EXT_CSD_OPERATION_CODE_TIMEOUT]) {
+		BUG_ON(-EINVAL);
 	}
 
 	kut_bug_on_do_exit_set(false);
@@ -418,7 +423,7 @@ int kut_ext_csd_verify_configuration(void)
 
 int kut_mmc_ext_csd_set_ffu(s8 ver, s8 ffu_status, s8 mode_operation_codes,
 	s8 mode_config, s8 data_sector_size, s8 fw_config, s32 ffu_arg,
-	s8 ffu_features, s8 supported_mode)
+	s8 ffu_features, s8 operation_code_timeout, s8 supported_mode)
 {
 	int ret;
 
@@ -467,6 +472,15 @@ int kut_mmc_ext_csd_set_ffu(s8 ver, s8 ffu_status, s8 mode_operation_codes,
 			(u8)ffu_features);
 		if (ret)
 			return ret;
+	}
+
+	if (operation_code_timeout != -1) {
+		ret = kut_mmc_ext_csd_set(EXT_CSD_OPERATION_CODE_TIMEOUT,
+			(u8)operation_code_timeout);
+		if (ret)
+			return ret;
+		if (0 < operation_code_timeout && ffu_features <= 0)
+			return -1;
 	}
 
 	if (supported_mode != -1) {
