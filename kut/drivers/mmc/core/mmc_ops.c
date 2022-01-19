@@ -416,13 +416,19 @@ int kut_ext_csd_verify_configuration(void)
 	return 0;
 }
 
-int kut_mmc_ext_csd_set_ffu(s8 ver, s8 mode_operation_codes, s8 mode_config,
-	s8 data_sector_size, s8 fw_config, s32 ffu_arg, s8 ffu_features,
-	s8 supported_mode)
+int kut_mmc_ext_csd_set_ffu(s8 ver, s8 ffu_status, s8 mode_operation_codes,
+	s8 mode_config, s8 data_sector_size, s8 fw_config, s32 ffu_arg,
+	s8 ffu_features, s8 supported_mode)
 {
 	int ret;
 
 	kut_mmc_ext_csd_reset((u8)ver);
+
+	if (ffu_status != -1) {
+		ret = kut_mmc_ext_csd_set(EXT_CSD_FFU_STATUS, (u8)ffu_status);
+		if (ret)
+			return ret;
+	}
 
 	if (mode_operation_codes != -1) {
 		ret = kut_mmc_ext_csd_set(EXT_CSD_MODE_OPERATION_CODES,
