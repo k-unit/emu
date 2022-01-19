@@ -21,6 +21,10 @@ int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 		return -EINVAL;
 	}
 
+	if (kut_mmc_ext_csd_set(index, value))
+		return -EINVAL;
+
+	kut_ext_csd_verify_configuration();
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mmc_switch);
